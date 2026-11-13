@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closing Highlighter — Jax Exports</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f2f2f2; color: #222; }
+  header { background: #1a1a1a; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0 8px 0 0; }
+  header .sub { color: #aaa; font-size: 12px; }
+  button, label.btn { background: #2e7d32; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button:hover, label.btn:hover { background: #256b29; }
+  button.secondary { background: #555; }
+  button.secondary:hover { background: #444; }
+  button.warn { background: #b26a00; }
+  button:disabled { opacity: .45; cursor: default; }
+  .legend { display: flex; gap: 14px; align-items: center; margin-left: auto; font-size: 13px; }
+  .swatch { display: inline-block; width: 16px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .sw-green { background: rgba(125,240,102,.75); border: 1px solid #4caf50; }
+  .sw-yellow { background: rgba(255,240,102,.85); border: 1px solid #d4c400; }
+  #main { display: flex; height: calc(100vh - 52px); }
+  #pages { width: 250px; background: #fff; border-right: 1px solid #ddd; overflow-y: auto; padding: 8px; }
+  #pages h3, #side h3 { margin: 6px 0 8px; font-size: 13px; text-transform: uppercase; color: #666; }
+  .thumb { border: 2px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 8px; cursor: pointer; background: #fafafa; }
+  .thumb.active { border-color: #2e7d32; background: #eef7ee; }
+  .thumb.unknown { border-color: #c62828; }
+  .thumb .pg { font-weight: bold; font-size: 13px; }
+  .thumb .fm { font-size: 12px; color: #333; }
+  .thumb .st { display: inline-block; font-size: 11px; background: #e3f2fd; color: #1565c0; border-radius: 8px; padding: 1px 7px; margin-top: 3px; }
+  .thumb .ct { font-size: 11px; color: #666; margin-top: 2px; }
+  #viewerWrap { flex: 1; overflow: auto; padding: 16px; display: flex; justify-content: center; }
+  #pageBox { position: relative; box-shadow: 0 2px 14px rgba(0,0,0,.25); background: #fff; height: fit-content; }
+  #pageBox canvas { display: block; }
+  #overlay { position: absolute; inset: 0; }
+  .hl { position: absolute; border-radius: 2px; cursor: move; }
+  .hl.sig { background: rgba(125,240,102,.55); outline: 1px solid rgba(76,175,80,.7); }
+  .hl.ini { background: rgba(255,240,102,.55); outline: 1px solid rgba(212,196,0,.8); }
+  .hl.selected { outline: 3px solid #1565c0; }
+  .hl.cobuyer-hidden { display: none; }
+  #drawHint { text-align: center; font-size: 12px; color: #777; padding: 6px; }
+  #side { width: 300px; background: #fff; border-left: 1px solid #ddd; overflow-y: auto; padding: 12px; }
+  #side .row { margin-bottom: 10px; font-size: 14px; }
+  #side label { font-size: 12px; color: #666; display: block; margin-bottom: 2px; }
+  #side input[type=text], #side select { width: 100%; padding: 7px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; }
+  .boxlist { font-size: 13px; }
+  .boxlist div { padding: 5px 6px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; }
+  .boxlist div.sel { background: #e3f2fd; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 14px; display: none; z-index: 50; }
+  #indexPanel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 420px; background: #fff; border-left: 2px solid #2e7d32; overflow-y: auto; padding: 16px; z-index: 40; box-shadow: -4px 0 16px rgba(0,0,0,.15); }
+  #indexPanel h2 { margin-top: 0; }
+  #indexPanel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #indexPanel td, #indexPanel th { border-bottom: 1px solid #eee; padding: 5px 4px; text-align: left; }
+  .badge { font-size: 11px; border-radius: 8px; padding: 1px 7px; background: #e3f2fd; color: #1565c0; }
+  .badge.sc { background: #fce4ec; color: #ad1457; }
+  .badge.fed { background: #ede7f6; color: #5e35b1; }
+  .badge.house { background: #e8f5e9; color: #2e7d32; }
+  #empty { text-align: center; color: #777; padding: 60px 20px; }
+  #empty big { font-size: 20px; color: #444; display: block; margin-bottom: 10px; }
+  .kbd { font-size: 11px; background: #eee; border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Closing Highlighter</h1><span class="sub">Jax Exports &mdash; auto-detects forms, marks signatures &amp; initials</span>
+  <label class="btn" for="filePick">Open closing packet (PDF)</label>
+  <input type="file" id="filePick" accept="application/pdf" style="display:none">
+  <button id="exportBtn" disabled>Export highlighted PDF</button>
+  <button id="printBtn" class="secondary" disabled>Print (single-sided)</button>
+  <button id="indexBtn" class="secondary">Form index</button>
+  <div class="legend">
+    <span><span class="swatch sw-green"></span>Green = sign full name</span>
+    <span><span class="swatch sw-yellow"></span>Yellow = initial</span>
+    <label style="color:#ddd"><input type="checkbox" id="cobuyerToggle"> Has co-buyer</label>
+  </div>
+</header>
+
+<div id="main">
+  <div id="pages"><h3>Pages</h3><div id="pageList"><div id="empty"><big>No packet loaded</big>Open a closing packet PDF to auto-detect every form and place the highlights.</div></div></div>
+  <div id="viewerWrap">
+    <div>
+      <div id="pageBox" style="display:none">
+        <canvas id="pdfCanvas"></canvas>
+        <div id="overlay"></div>
+      </div>
+      <div id="drawHint">Drag on the page to draw a new highlight &bull; click one to select it &bull; <span class="kbd">G</span> green / <span class="kbd">Y</span> yellow / <span class="kbd">Del</span> remove</div>
+    </div>
+  </div>
+  <div id="side">
+    <h3>Current page</h3>
+    <div class="row"><label>Detected form</label><div id="formName" style="font-weight:bold">—</div><div id="formMeta" style="font-size:12px;color:#666"></div></div>
+    <div class="row"><label>Draw color</label>
+      <button id="drawGreen" style="background:#4caf50">Green — signature</button>
+      <button id="drawYellow" class="secondary" style="background:#c9a227">Yellow — initials</button>
+    </div>
+    <div class="row"><label>Highlights on this page</label><div class="boxlist" id="boxList"><div style="color:#888">None yet.</div></div></div>
+    <div class="row" id="teachBox" style="display:none;border-top:1px solid #ddd;padding-top:10px">
+      <label>Unknown form — teach it once, never again</label>
+      <input type="text" id="teachName" placeholder="Form name, e.g. GA Title Application">
+      <div style="height:6px"></div>
+      <select id="teachState">
+        <option value="FL">Florida</option><option value="SC">South Carolina</option>
+        <option value="GA">Georgia</option><option value="NC">North Carolina</option>
+        <option value="Federal">Federal</option><option value="House">Jax Exports (house form)</option>
+        <option value="Other">Other state</option>
+      </select>
+      <div style="height:8px"></div>
+      <button id="teachSave" class="warn">Save to form index</button>
+      <div style="font-size:12px;color:#666;margin-top:6px">Draw the green/yellow boxes on the page first — or save with none if this page needs no signatures or initials. Either way it won't flag red again, and next time this form appears it will be detected automatically.</div>
+    </div>
+    <div class="row" style="border-top:1px solid #ddd;padding-top:10px">
+      <label>Packet totals</label>
+      <div id="totals" style="font-size:14px">—</div>
+      <div style="font-size:12px;color:#666;margin-top:4px">Dates are left blank on purpose — finance fills them in. Print single-sided only.</div>
+    </div>
+  </div>
+</div>
+
+<div id="indexPanel">
+  <h2>Form index <button class="secondary" id="indexClose" style="float:right">Close</button></h2>
+  <p style="font-size:13px;color:#555">Every form the app knows, grouped by jurisdiction. When a new state's form shows up in a packet, teach it once from an unknown page and it lands here. Export the index to share it with every PC in the office; import it on another PC to sync.</p>
+  <div style="margin-bottom:10px">
+    <button id="exportIndex">Export index (.json)</button>
+    <label class="btn secondary" for="importIndex">Import index</label>
+    <input type="file" id="importIndex" accept="application/json" style="display:none">
+  </div>
+  <div id="indexTable"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ================= SEED: form rules from the analyzed reference packet ================ */
+/* Boxes are fractions of the page (x,y from top-left, w,h). type: 'sig' green, 'ini' yellow. */
+const SEED = [{"id": "buyers-order-3", "name": "FL Buyer's Order / Bill of Sale \u2014 p.3", "state": "FL", "fp": ["buyer.s order / bill of sale", "section 501\\.98"], "boxes": [{"x": 0.14496928104575163, "y": 0.5113434343434343, "w": 0.23576614379084967, "h": 0.014462121212121221, "type": "sig", "label": "Buyer Signs (Sec. 501.98)", "cobuyer": false}, {"x": 0.061274509803921566, "y": 0.7733, "w": 0.20197027614379084, "h": 0.016, "type": "sig", "label": "Buyer signature", "cobuyer": false}, {"x": 0.47805006535947714, "y": 0.9663080808080808, "w": 0.09841712418300648, "h": 0.016030303030303034, "type": "ini", "label": "Buyer's initials", "cobuyer": false}]}, {"id": "buyers-order-2", "name": "FL Buyer's Order / Bill of Sale \u2014 p.2", "state": "FL", "fp": ["buyer.s order / bill of sale", "used car buyers guide: the information"], "boxes": [{"x": 0.4870335947712418, "y": 0.9663080808080808, "w": 0.08943359477124184, "h": 0.016030303030303034, "type": "ini", "label": "Buyer's initials", "cobuyer": false}]}, {"id": "buyers-order-1", "name": "FL Buyer's Order / Bill of Sale \u2014 p.1", "state": "FL", "fp": ["buyer.s order / bill of sale", "total balance due"], "boxes": [{"x": 0.5016523202614379, "y": 0.9663724747474748, "w": 0.09366055555555558, "h": 0.015943181818181818, "type": "ini", "label": "Buyer's initials", "cobuyer": false}]}, {"id": "buyers-guide-front", "name": "Buyers Guide \u2014 front (FTC)", "state": "Federal", "fp": ["buyers guide", "as is - no dealer warranty"], "hash": "111111111111111111111111111111111111111111111111111111111111111111111111111000000000011111111111111100000000000100000000000111111111111111111111111111111111111111110000000000000000000000001111111101000100100000000000111111111111010011011111000111111111111111111100001111111111111111111111111111000001000000000000000111111111100001111111000111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110000000000000000000000001111111100000000000001111111111111111111000010000000000010100001111111000000000001000000000000011111111100000000000000000000000011111111000000000010000010000011111111110000010110001100000100011111111100000111111111111111111111111110000000000000000000000000011111111111111111111111111111111111", "boxes": [{"x": 0.5931372549019608, "y": 0.5867, "w": 0.2385944019607843, "h": 0.016, "type": "sig", "label": "Non-dealer warranties area", "cobuyer": false}, {"x": 0.049019607843137254, "y": 0.724, "w": 0.10024185130718953, "h": 0.016, "type": "ini", "label": "Service contract checkbox", "cobuyer": false}]}, {"id": "buyers-guide-back", "name": "Buyers Guide \u2014 back (FTC)", "state": "Federal", "fp": ["here is a list of some major defects"], "hash": "111111111111111111111111111111111110000000000000000000000000011111110000000000000000000000001111111111111111111111111111111111111111000000110000001100000001111111110000011110001111100111111111111100000111000001110000011111111111000000010001111100000011111111110000000100000001100000011111111110000001000000000000111111111111100111110011111100000011111111111111111111111111101111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100011111111111111111111111111111000000000011111111111111111111110000000000000000000000001111111111111111111111111111111111111111100000000111111111111111111111111111111111111111111111111111111100000000000000000001111111111110000000000000000000000000011111111111111111111111111111111111", "boxes": [{"x": 0.16544117647058823, "y": 0.8101, "w": 0.22993519607843135, "h": 0.016, "type": "sig", "label": "Acknowledgement signature", "cobuyer": false}]}, {"id": "privacy-1", "name": "Privacy Notice \u2014 p.1", "state": "FL", "fp": ["what does", "do with your personal information", "privacy\\.pdf"], "boxes": []}, {"id": "privacy-2", "name": "Privacy Notice \u2014 p.2", "state": "FL", "fp": ["print customer name"], "boxes": [{"x": 0.4111111111111111, "y": 0.832929292929293, "w": 0.24062941176470592, "h": 0.013358585858585856, "type": "sig", "label": "Customer signature", "cobuyer": false}]}, {"id": "arbitration", "name": "Arbitration Agreement (WR Multistate)", "state": "FL", "fp": ["arbitration agreement", "wr multistate arbitration"], "boxes": [{"x": 0.061274509803921566, "y": 0.8116, "w": 0.22115400490196077, "h": 0.016, "type": "sig", "label": "Buyer signature", "cobuyer": false}]}, {"id": "dr-123", "name": "DR-123 Partial Exemption (out-of-state buyer)", "state": "FL", "fp": ["partial exemption for motor vehicle sold"], "boxes": [{"x": 0.06336601307189543, "y": 0.8469696969696969, "w": 0.26143790849673204, "h": 0.01452020202020202, "type": "sig", "label": "Signature of Nonresident Purchaser", "cobuyer": false}, {"x": 0.08388071895424837, "y": 0.6247474747474748, "w": 0.08088235294117646, "h": 0.013068181818181776, "type": "ini", "label": "Purchaser's initials", "cobuyer": false}]}, {"id": "poa-82053", "name": "Power of Attorney \u2014 HSMV 82053", "state": "FL", "fp": ["power of attorney for a motor vehicle"], "hash": "111111111111111111111111111111111111111111111111111011111111111111111111111100000000111111111111111111111111111111111000000011111101000001100111000101010100011111110001111111111111001011111111111111111111111111111111111111111100100010000100110001111111111111010000000000111111111111111111111111111111111000000010000001111011100001110111111110000001011110111111111111111111101111111111110000000000010001000000111111111100000001000010010000000001001110100001111111111110000000011011100000000000000000000000000000111001010011100111111000010111101110111111111111101111110111111011111111111111111111111111111111111100000100000010000000000000111111000000011111111111111111111111111101000111111111111111111111111100000100010000000000011111111111111111111111111111111111111111", "boxes": [{"x": 0.616421568627451, "y": 0.5962, "w": 0.20666021895424833, "h": 0.016, "type": "sig", "label": "Signature of Owner (Grantor)", "cobuyer": false}]}, {"id": "declaration-84061", "name": "Declaration Affidavit \u2014 HSMV 84061 S", "state": "FL", "fp": ["declaration affidavit for a motor vehicle"], "hash": "111111111111111111111111111111111111111111111111111111111111111111111111000000000000000011111111111100000000000010000000000011111111100000000001000000000101111111111111111111111111111111111111111100000001111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110011110111111111111110100000011101110111011111111111111111111111010100000011111111111111111111111111111111111111111111111111111111111111111111111110000001111111101111111111111111111111111111110000000111111111111111111111111111111111111111111111111111111111111111111111111111100000000000110000000100111111111100000000000111111111111111111110000011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", "boxes": [{"x": 0.5379901960784313, "y": 0.6322, "w": 0.21675557679738558, "h": 0.016, "type": "sig", "label": "Purchaser's Signature", "cobuyer": false}]}, {"id": "odometer-82993", "name": "Separate Odometer Disclosure \u2014 HSMV 82993", "state": "FL", "fp": ["separate odometer disclosure statement"], "boxes": [{"x": 0.1090686274509804, "y": 0.5829, "w": 0.25216921568627454, "h": 0.016, "type": "sig", "label": "Buyer's Signature", "cobuyer": false}]}, {"id": "insurance-affidavit", "name": "FL Insurance Affidavit \u2014 HSMV 83330", "state": "FL", "fp": ["florida insurance affidavit"], "boxes": [{"x": 0.5294886928104575, "y": 0.4519400252525253, "w": 0.23612581699346408, "h": 0.01497032828282826, "type": "sig", "label": "Signature of Insured", "cobuyer": false}]}, {"id": "air-pollution", "name": "Vehicle Air Pollution Control Statement \u2014 HSMV 84058", "state": "FL", "fp": ["vehicle air pollution control statement"], "boxes": [{"x": 0.4160130718954248, "y": 0.6078219696969697, "w": 0.2204248366013072, "h": 0.014955808080808115, "type": "sig", "label": "Signature", "cobuyer": false}]}, {"id": "ofac", "name": "OFAC Security Statement", "state": "Federal", "fp": ["ofac security statement"], "hash": "111111111111111111111111111111111111111110000000000000111111111111111111100000000000000111111111111111111111111111111111111111111111111100111111111111111111111111111111100001111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100101111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110011111111111111111111111111111111111111111111111000000000001100000000000111111110000000000011000000000001111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100000000000110000000000011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", "boxes": [{"x": 0.5600490196078431, "y": 0.5351, "w": 0.26456166013071897, "h": 0.016, "type": "sig", "label": "Signature of Customer", "cobuyer": false}]}, {"id": "cod-tag", "name": "C.O.D. Tag / Registration Notice \u2014 HSMV 83351", "state": "FL", "fp": ["c\\.o\\.d\\. tag /registration notice"], "hash": "111111111111111111111111111111111111111111111111111111111111111111111111100000000000000111111111111111111111111111111111111111111111111111111111111111111111111111111111010000000000000000001111111100000000110100000000000011111111000001001000000000000000111111110000000110000000100001111111111111111111111111111111111111111111000010000000000100100000111111110000000011111111000000001111111111111111110111111111000011111111111111111111111111111111111111110000000000000111111111111111111100000100000000000000000011111111010000010100100001000000111111111111111111111111111111111111111111111111111111111100111111111111011111111111111111011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", "boxes": [{"x": 0.17401960784313725, "y": 0.743, "w": 0.2119507320261438, "h": 0.016, "type": "sig", "label": "Buyer signature", "cobuyer": false}]}, {"id": "deal-cover", "name": "Deal Cover Sheet", "state": "House", "fp": ["dealcoversheet\\.pdf"], "boxes": []}, {"id": "sc-ti006-2", "name": "SC Statement of Vehicle Operation TI-006 \u2014 p.2", "state": "SC", "fp": ["sc_statement_of_veh_oper"], "boxes": [], "maxText": 100}, {"id": "sc-ti006-1", "name": "SC Statement of Vehicle Operation TI-006 \u2014 p.1", "state": "SC", "fp": ["sc_statement_of_veh_oper"], "hash": "111111111111111111111111111111111110111111111111111111111111111111000100000000110001000010110111110000000000000000000000000000111111111111111111111111111111111111001000100111011111111101111111110000000000100111111111111111111110000000000001001111111111111111000100000000000000000100000111110000000000000000000000000000111110100110000011111111111111111111101000000000010100010101001111111000000010001111111111111111111110000000000000000001111111111111101000000000101100101000111111111000000000000100111111111111111110001000000011111111100011111111000000000000000000000000000011111111111111111111111111111111111100000000000011010011111111111111111111111111111111111111111111110000000000000000000000000000111111111111111111111111111111111111111111111111111111111111111111", "boxes": [{"x": 0.07720588235294118, "y": 0.8093, "w": 0.28141891503267974, "h": 0.016, "type": "sig", "label": "Section C signature", "cobuyer": false}]}, {"id": "sc-form400-2", "name": "SC Title / Registration Application (Form 400) \u2014 p.2", "state": "SC", "fp": ["sctitleapp400", "section 2"], "hash": "111111111111111111111111111111111100111111100011000101111101011111000000011111111111111111111111110001000011100001100000000011111100000001100000100010001010011111111111111111111111111111111111111111111111111111111111111111111100000000000000000100111010011111111111111100001111111111111111111111111111111111111111111111111100000000000000000000000000001111111001111111111111111111111111110101111111111111111111111111111100000001000000000000111111111111100000000000000000010000000111110111111111111111111111111111111100000000000000000000000000001111111111111111111111111111111111110000101100001010100000000011111100000000001111111111111111111111000000110011001000010000110111110000000000010000000000000000111100000000000100000000000011011111111111111111111111111111111111", "boxes": [{"x": 0.06985294117647059, "y": 0.8073, "w": 0.30345581045751635, "h": 0.016, "type": "sig", "label": "Owner signature (Section 4)", "cobuyer": false}], "hashFirst": true}, {"id": "sc-form400-1", "name": "SC Title / Registration Application (Form 400) \u2014 p.1", "state": "SC", "fp": ["sctitleapp400"], "boxes": [], "hash": "111111111111111111111111111111111100111111100011000000111101011111000000000010000100000000000011110000000000000000000001000000111100000000000000000000000000001111111111111111111111111111111111110000001111111111111111111111111100111000111011001100000001111111000000011111111111111111111111110000000000001000010000001000111111111111111111111111111111111111000011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111010111111111001111101111101111111111111111111111111111111111111100000000000000000000000000001111000000001111100000000000000011111000000000000000000101000011111100000111111111111111111111111111000101111111110111111110110111111001001001011100111101110111111111111111111111111111111111111111111111111111111111111111111111", "hashFirst": true}, {"id": "asis-disclosure", "name": "AS-IS Disclosure & Buyer Acknowledgment (house form)", "state": "House", "fp": null, "hash": "111111111111111111111111111111111111111111111111111111111111111111111010001111111111111111111111111110000000000001001111111111111111000001100000100110101101111111111000000001000001111111111111111111111111111110111111111111111111000000000100000011111111111111111000000000000011111111111111111100000000111111111111111111111111000000000000110101000101111111110000000010000000111111111111111110101110111111111111101111111111100000000000111111111111111111111111100111111111111111111111111100000000000000000000001111111111000000000000000000000000011111110000000011000000000000011111111111111111111111111111111111111111111111111111101110111111111111111111111111111111111111111111111111000000000100001000000111111111111111111111111111111111111111111111111111111111111111111111", "boxes": [{"x": 0.3762254901960784, "y": 0.783, "w": 0.2499834411764706, "h": 0.016, "type": "sig", "label": "Buyer Signature", "cobuyer": false}, {"x": 0.44362745098039214, "y": 0.1721, "w": 0.06067470751633989, "h": 0.016, "type": "ini", "label": "\u00a71 Sale is AS-IS", "cobuyer": false}, {"x": 0.5171568627450981, "y": 0.2683, "w": 0.05552413071895427, "h": 0.016, "type": "ini", "label": "\u00a72 Buyer responsibility", "cobuyer": false}, {"x": 0.5036764705882353, "y": 0.3533, "w": 0.060037611111111125, "h": 0.016, "type": "ini", "label": "\u00a73 No return", "cobuyer": false}, {"x": 0.5735294117647058, "y": 0.4089, "w": 0.055432388888888885, "h": 0.016, "type": "ini", "label": "\u00a74 No verbal promises", "cobuyer": false}, {"x": 0.5661764705882353, "y": 0.473, "w": 0.05702393464052284, "h": 0.016, "type": "ini", "label": "\u00a75 Inspection & test drive", "cobuyer": false}, {"x": 0.43504901960784315, "y": 0.5561, "w": 0.056228148692810474, "h": 0.016, "type": "ini", "label": "\u00a76 Buyers Guide", "cobuyer": false}, {"x": 0.47549019607843135, "y": 0.6123, "w": 0.05901478921568628, "h": 0.016, "type": "ini", "label": "\u00a77 Odometer", "cobuyer": false}, {"x": 0.3958333333333333, "y": 0.6657, "w": 0.05755147058823528, "h": 0.016, "type": "ini", "label": "\u00a78 Acknowledgment", "cobuyer": false}]}, {"id": "gap-addendum", "name": "GAP & Vehicle Service Agreement Addendum (house form)", "state": "House", "fp": null, "hash": "111111111111111111111111111111111111111100011001101101000111111111111111111111111111111111111111111100000100010000111111111111111111111111111111110011111111111111110010000010100001111111111111111111111111111111111111111111111111111111010111111111111111111111110000000000000000000101000111111100000000000000001000000001111111000000111111111110111010111111111111111111111111111111111111111100010000000000000000000011111111000000000000000000000000011111111111111111111111111111111111111100000000000000111100011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111000000111111111111111111111111111111111111111111111111111111111111000000001000000000000111111111111111111111111111111111111111111111111111111111111111111111", "boxes": [{"x": 0.28799019607843135, "y": 0.6282, "w": 0.26340206535947713, "h": 0.016, "type": "sig", "label": "Buyer's Signature", "cobuyer": false}, {"x": 0.4166666666666667, "y": 0.313, "w": 0.06483576307189541, "h": 0.016, "type": "ini", "label": "GAP declined/accepted", "cobuyer": false}, {"x": 0.4178921568627451, "y": 0.5033, "w": 0.07585546405228757, "h": 0.016, "type": "ini", "label": "VSC declined/accepted", "cobuyer": false}]}, {"id": "instructions", "name": "Instructions cover sheet", "state": "House", "fp": ["please read before signing"], "boxes": []}, {"id": "thank-you", "name": "Thank-you letter", "state": "House", "fp": ["we extend our sincere appreciation"], "hash": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100000000000000001000000111111111100001001011000010000011111111111000001000000000111111111111111101011000000001000000000001111111000000000000000000000000111111110000000100000000010000011111111100000000001111111111111111111111000000000000000000000001111111110000000111110100110000010111111111101110110011100011111111111111111111111111111111111111111111111111111111010001111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110", "boxes": []}, {"id": "blank", "name": "Blank page \u2014 skip", "state": "House", "fp": null, "hash": "111111111111111111111111111111111111111111111111111011110101111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100011111111111111111111111111111", "boxes": []}];
+
+/* ================= App state ================= */
+const BLANK_HASH = "111111111111111111111111111111111111111111111111111011110101111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100011111111111111111111111111111";
+let pdfDoc = null, pdfBuf = null, fileName = 'closing-packet.pdf';
+let pages = [];           // {num, text, formId, formName, state, how, dist, boxes:[], phash}
+let current = 0, selectedBox = -1, drawType = 'sig', hasCobuyer = false;
+let customForms = JSON.parse(localStorage.getItem('ch_index_v1') || '[]');
+const $ = id => document.getElementById(id);
+const GREEN = 'rgba(125,240,102,.55)', YELLOW = 'rgba(255,240,102,.55)';
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none', 2600); }
+function allForms(){ const m={}; SEED.forEach(f=>m[f.id]=f); customForms.forEach(f=>m[f.id]=f); return Object.values(m); }
+function findForm(id){ return allForms().find(f=>f.id===id); }
+
+/* ================= Detection ================= */
+function normText(t){ return t.toLowerCase().replace(/\s+/g,' ').trim(); }
+function textMatch(form, text){
+  if(!form.fp) return false;
+  if(form.maxText && text.length > form.maxText) return false;
+  return form.fp.every(re => new RegExp(re,'i').test(text));
+}
+function hamming(a,b){ let d=0; for(let i=0;i<Math.min(a.length,b.length);i++) if(a[i]!==b[i]) d++; return d; }
+async function pageHash(page){
+  // Render the whole page, then downscale to 32x24 — the same pipeline the
+  // reference hashes were computed with (full-page render, LANCZOS resize).
+  const vp = page.getViewport({scale: 96/612});
+  const c = document.createElement('canvas'); c.width=96; c.height=Math.round(96*page.getViewport({scale:1}).height/page.getViewport({scale:1}).width);
+  const ctx = c.getContext('2d');
+  await page.render({canvasContext: ctx, viewport: vp}).promise;
+  const small = document.createElement('canvas'); small.width=32; small.height=24;
+  const sctx = small.getContext('2d');
+  sctx.drawImage(c, 0, 0, 32, 24);
+  const d = sctx.getImageData(0,0,32,24).data;
+  const vals=[]; let sum=0;
+  for(let i=0;i<d.length;i+=4){ const g=(d[i]+d[i+1]+d[i+2])/3; vals.push(g); sum+=g; }
+  const avg=sum/vals.length;
+  return vals.map(v=>v>avg?'1':'0').join('');
+}
+function detectPage(text, phash){
+  const t = normText(text);
+  // Forms that share a text fingerprint with a sibling page (SC Form 400 p.1/p.2)
+  // are decided by their picture first.
+  for(const f of allForms()){
+    if(f.hashFirst && f.hash && hamming(phash, f.hash)<=96) return {form:f, how:'visual', dist:hamming(phash, f.hash)};
+  }
+  for(const f of allForms()){
+    if(f.fp && textMatch(f, t)) return {form:f, how:'text', dist:0};
+  }
+  // visual match for scanned pages
+  let best=null, bestD=1e9;
+  for(const f of allForms()){
+    if(!f.hash) continue;
+    const d=hamming(phash, f.hash);
+    if(d<bestD){ bestD=d; best=f; }
+  }
+  if(best && bestD<=96) return {form:best, how:'visual', dist:bestD};
+  if(!t && phash && hamming(phash, BLANK_HASH)<=40) return {form:findForm('blank'), how:'visual', dist:0};
+  return {form:null, how:'unknown', dist:bestD};
+}
+
+/* ================= Load & render ================= */
+$('filePick').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  fileName=file.name.replace(/\.pdf$/i,'');
+  // Keep the original bytes for the exporter. pdf.js hands its copy to a worker,
+  // which empties it — giving pdf.js the original left the exporter with nothing.
+  pdfBuf=await file.arrayBuffer();
+  try{ pdfDoc=await pdfjsLib.getDocument({data: pdfBuf.slice(0)}).promise; }
+  catch(err){ toast('Could not open that PDF.'); return; }
+  pages=[];
+  for(let n=1;n<=pdfDoc.numPages;n++){
+    const page=await pdfDoc.getPage(n);
+    const tc=await page.getTextContent();
+    const text=tc.items.map(it=>it.str).join(' ');
+    const ph=await pageHash(page);
+    const det=detectPage(text, ph);
+    pages.push({num:n, text, phash:ph, formId:det.form?det.form.id:null,
+      formName:det.form?det.form.name:'Unknown form', state:det.form?det.form.state:'—',
+      how:det.how, dist:det.dist,
+      boxes:det.form?det.form.boxes.map(b=>({...b})):[]});
+  }
+  current=0; selectedBox=-1;
+  $('exportBtn').disabled=false; $('printBtn').disabled=false;
+  renderList(); await renderPage(0); updateTotals();
+  const unk=pages.filter(p=>!p.formId).length;
+  toast(`Loaded ${pages.length} pages — ${pages.length-unk} auto-detected${unk?`, ${unk} need teaching`:''}.`);
+});
+$('cobuyerToggle').addEventListener('change', e=>{ hasCobuyer=e.target.checked; renderOverlay(); updateTotals(); });
+
+function renderList(){
+  const el=$('pageList'); el.innerHTML='';
+  pages.forEach((p,i)=>{
+    const d=document.createElement('div');
+    d.className='thumb'+(i===current?' active':'')+(!p.formId?' unknown':'');
+    const sig=p.boxes.filter(b=>b.type==='sig'&&(!b.cobuyer||hasCobuyer)).length;
+    const ini=p.boxes.filter(b=>b.type==='ini'&&(!b.cobuyer||hasCobuyer)).length;
+    d.innerHTML=`<div class="pg">Page ${p.num}</div><div class="fm">${p.formName}</div>`+
+      (p.formId?`<span class="st">${p.state}</span> <span class="ct">${sig} sign &bull; ${ini} initial</span>`
+               :`<span class="ct" style="color:#c62828">Not recognized — teach it</span>`);
+    d.onclick=()=>{ current=i; selectedBox=-1; renderList(); renderPage(i); };
+    el.appendChild(d);
+  });
+}
+
+async function renderPage(i){
+  const p=pages[i]; if(!p) return;
+  const page=await pdfDoc.getPage(p.num);
+  const vp1=page.getViewport({scale:1});
+  const fitScale=Math.min(1.6, (document.getElementById('viewerWrap').clientWidth-60)/vp1.width);
+  const renderScale=fitScale*2.5; // render big, display fit — crisp on any screen
+  const vp=page.getViewport({scale:renderScale});
+  const cv=$('pdfCanvas');
+  cv.width=vp.width; cv.height=vp.height;
+  cv.style.width=(vp1.width*fitScale)+'px'; cv.style.height=(vp1.height*fitScale)+'px';
+  $('pageBox').style.display='block';
+  $('pageBox').style.width=(vp1.width*fitScale)+'px'; $('pageBox').style.height=(vp1.height*fitScale)+'px';
+  await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
+  $('formName').textContent=`Page ${p.num} — ${p.formName}`;
+  $('formMeta').textContent=p.formId?`${p.state} • matched by ${p.how==='text'?'form text':'page image'}${p.how==='visual'&&p.dist?' (distance '+p.dist+')':''} • ${p.boxes.length} highlight(s)`:'No match in the form index yet.';
+  $('teachBox').style.display=p.formId?'none':'block';
+  renderOverlay(); renderBoxList();
+}
+
+function visibleBoxes(p){ return p.boxes.filter(b=>!b.cobuyer||hasCobuyer); }
+function renderOverlay(){
+  const ov=$('overlay'); ov.innerHTML='';
+  const p=pages[current]; if(!p) return;
+  const W=$('pdfCanvas').width, H=$('pdfCanvas').height;
+  visibleBoxes(p).forEach((b,idx)=>{
+    const d=document.createElement('div');
+    d.className='hl '+(b.type==='sig'?'sig':'ini')+(idx===selectedBox?' selected':'');
+    d.style.left=(b.x*100)+'%'; d.style.top=(b.y*100)+'%';
+    d.style.width=(b.w*100)+'%'; d.style.height=(b.h*100)+'%';
+    d.title=(b.label||(b.type==='sig'?'Signature':'Initials'))+(b.cobuyer?' (co-buyer)':'');
+    d.addEventListener('pointerdown', ev=>{ ev.stopPropagation(); selectedBox=idx; startMove(ev,b,d); renderOverlay(); renderBoxList(); });
+    ov.appendChild(d);
+  });
+}
+function renderBoxList(){
+  const p=pages[current]; const el=$('boxList');
+  if(!p||!p.boxes.length){ el.innerHTML='<div style="color:#888">None yet.</div>'; return; }
+  el.innerHTML='';
+  p.boxes.forEach((b,i)=>{
+    const d=document.createElement('div');
+    d.className=selectedBox===i?'sel':'';
+    d.innerHTML=`<span>${b.type==='sig'?'🟢':'🟡'} ${b.label||(b.type==='sig'?'Signature':'Initials')}${b.cobuyer?' (co-buyer)':''}</span><span><button data-a="flip" style="padding:2px 8px">↔ color</button> <button data-a="del" style="padding:2px 8px;background:#c62828">✕</button></span>`;
+    d.onclick=()=>{ selectedBox=i; renderOverlay(); renderBoxList(); };
+    d.querySelector('[data-a=flip]').onclick=ev=>{ ev.stopPropagation(); b.type=b.type==='sig'?'ini':'sig'; renderOverlay(); renderBoxList(); updateTotals(); };
+    d.querySelector('[data-a=del]').onclick=ev=>{ ev.stopPropagation(); p.boxes.splice(i,1); selectedBox=-1; renderOverlay(); renderBoxList(); renderList(); updateTotals(); };
+    el.appendChild(d);
+  });
+}
+function updateTotals(){
+  let s=0, i2=0;
+  pages.forEach(p=>visibleBoxes(p).forEach(b=>b.type==='sig'?s++:i2++));
+  $('totals').textContent=pages.length?`${s} signatures (green) • ${i2} initials (yellow) • ${pages.length} pages`:'—';
+}
+
+/* ---- draw new box / move existing ---- */
+let drag=null;
+$('overlay').addEventListener('pointerdown', ev=>{
+  if(!pages[current]) return;
+  const r=$('overlay').getBoundingClientRect();
+  const x=(ev.clientX-r.left)/r.width, y=(ev.clientY-r.top)/r.height;
+  drag={x0:x,y0:y,el:null};
+  const ghost=document.createElement('div');
+  ghost.className='hl '+(drawType==='sig'?'sig':'ini');
+  ghost.style.left=(x*100)+'%'; ghost.style.top=(y*100)+'%'; ghost.style.width='0'; ghost.style.height='0';
+  $('overlay').appendChild(ghost); drag.el=ghost;
+  ev.preventDefault();
+});
+window.addEventListener('pointermove', ev=>{
+  if(!drag) return;
+  const r=$('overlay').getBoundingClientRect();
+  const x=Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)), y=Math.max(0,Math.min(1,(ev.clientY-r.top)/r.height));
+  if(drag.box){ // moving an existing box
+    const b=drag.box;
+    b.x=Math.max(0,Math.min(1-b.w, drag.ox + (x-drag.sx)));
+    b.y=Math.max(0,Math.min(1-b.h, drag.oy + (y-drag.sy)));
+    renderOverlay();
+  } else {
+    const w=Math.abs(x-drag.x0), h=Math.abs(y-drag.y0);
+    drag.el.style.left=(Math.min(x,drag.x0)*100)+'%'; drag.el.style.top=(Math.min(y,drag.y0)*100)+'%';
+    drag.el.style.width=(w*100)+'%'; drag.el.style.height=(h*100)+'%';
+    drag.w=w; drag.h=h; drag.lx=Math.min(x,drag.x0); drag.ly=Math.min(y,drag.y0);
+  }
+});
+window.addEventListener('pointerup', ()=>{
+  if(!drag) return;
+  if(drag.box){ drag=null; renderList(); updateTotals(); return; }
+  if(drag.w>0.01 && drag.h>0.004){
+    pages[current].boxes.push({x:drag.lx, y:drag.ly, w:drag.w, h:drag.h, type:drawType, label:drawType==='sig'?'Signature':'Initials', cobuyer:false});
+    selectedBox=pages[current].boxes.length-1;
+    renderOverlay(); renderBoxList(); renderList(); updateTotals();
+  } else { renderOverlay(); }
+  drag=null;
+});
+function startMove(ev,b,el){
+  const r=$('overlay').getBoundingClientRect();
+  drag={box:b, sx:(ev.clientX-r.left)/r.width, sy:(ev.clientY-r.top)/r.height, ox:b.x, oy:b.y};
+}
+window.addEventListener('keydown', ev=>{
+  if(!pages[current]) return;
+  if(ev.key==='g'||ev.key==='G'){ setDraw('sig'); }
+  if(ev.key==='y'||ev.key==='Y'){ setDraw('ini'); }
+  if((ev.key==='Delete'||ev.key==='Backspace') && selectedBox>=0){
+    pages[current].boxes.splice(selectedBox,1); selectedBox=-1;
+    renderOverlay(); renderBoxList(); renderList(); updateTotals();
+  }
+});
+function setDraw(t){ drawType=t;
+  $('drawGreen').style.background=t==='sig'?'#2e7d32':'#4caf50';
+  $('drawYellow').style.background=t==='ini'?'#8a6d00':'#c9a227';
+}
+$('drawGreen').onclick=()=>setDraw('sig');
+$('drawYellow').onclick=()=>setDraw('ini');
+
+/* ================= Teach a new form ================= */
+$('teachSave').onclick=()=>{
+  const p=pages[current]; if(!p) return;
+  const name=$('teachName').value.trim();
+  if(!name){ toast('Give the form a name first.'); return; }
+  const state=$('teachState').value;
+  const id='custom-'+Date.now().toString(36);
+  const fp = p.text.trim() ? [escapeRegExp(normText(p.text).slice(0,120))] : null;
+  const form={id, name, state, boxes:p.boxes.map(b=>({...b})), hash:p.phash, fp,
+    taught:new Date().toISOString().slice(0,10)};
+  customForms.push(form);
+  localStorage.setItem('ch_index_v1', JSON.stringify(customForms));
+  p.formId=id; p.formName=name; p.state=state; p.how='taught';
+  // apply to any other unrecognized page with the same look
+  pages.forEach(q=>{ if(!q.formId && q.phash && hamming(q.phash, p.phash)<=96){
+    q.formId=id; q.formName=name; q.state=state; q.how='visual'; q.boxes=form.boxes.map(b=>({...b})); }});
+  renderList(); renderPage(current); renderIndex();
+  toast(p.boxes.length?`Saved "${name}" (${state}) to the index — it'll auto-detect next time.`
+    :`Saved "${name}" (${state}) as no highlights needed — it won't flag red again.`);
+};
+function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+/* ================= Index panel ================= */
+$('indexBtn').onclick=()=>{ renderIndex(); $('indexPanel').style.display='block'; };
+$('indexClose').onclick=()=>{ $('indexPanel').style.display='none'; };
+function renderIndex(){
+  const groups={};
+  allForms().forEach(f=>{ (groups[f.state]=groups[f.state]||[]).push(f); });
+  const order=['FL','SC','GA','NC','Federal','House','Other'];
+  let html='';
+  order.concat(Object.keys(groups).filter(k=>!order.includes(k))).forEach(st=>{
+    const list=(groups[st]||[]).sort((a,b)=>a.name.localeCompare(b.name));
+    if(!list.length) return;
+    const cls=st==='SC'?'sc':st==='Federal'?'fed':st==='House'?'house':'';
+    html+=`<h3 style="margin:14px 0 4px">${st}</h3><table><tr><th>Form</th><th>Marks</th><th></th></tr>`;
+    list.forEach(f=>{
+      const s=f.boxes.filter(b=>b.type==='sig').length, ii=f.boxes.filter(b=>b.type==='ini').length;
+      const custom=f.id.startsWith('custom-');
+      html+=`<tr><td>${f.name}${f.taught?` <span class="badge">taught ${f.taught}</span>`:''}</td><td>${s}🟢 ${ii}🟡</td><td>${custom?`<button data-del="${f.id}" style="padding:2px 8px;background:#c62828">Remove</button>`:''}</td></tr>`;
+    });
+    html+='</table>';
+  });
+  $('indexTable').innerHTML=html||'<p>No forms yet.</p>';
+  $('indexTable').querySelectorAll('[data-del]').forEach(btn=>btn.onclick=()=>{
+    customForms=customForms.filter(f=>f.id!==btn.dataset.del);
+    localStorage.setItem('ch_index_v1', JSON.stringify(customForms));
+    renderIndex(); toast('Removed from index.');
+  });
+}
+$('exportIndex').onclick=()=>{
+  const blob=new Blob([JSON.stringify({version:1, exported:new Date().toISOString(), forms:customForms}, null, 2)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='closing-index.json'; a.click(); URL.revokeObjectURL(a.href);
+  toast('Index exported — put closing-index.json on the shared drive so every PC can import it.');
+};
+$('importIndex').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  try{
+    const data=JSON.parse(await file.text());
+    const incoming=data.forms||data;
+    let added=0;
+    incoming.forEach(f=>{ if(f.id && f.name && !customForms.some(c=>c.id===f.id)){ customForms.push(f); added++; } });
+    localStorage.setItem('ch_index_v1', JSON.stringify(customForms));
+    renderIndex(); toast(`Imported ${added} form(s) into the index.`);
+  }catch(err){ toast('That file is not a valid index.'); }
+});
+
+/* ================= Export highlighted PDF ================= */
+async function buildHighlighted(){
+  if(!pdfBuf || pdfBuf.byteLength < 100) throw new Error('Packet data is missing — reload the PDF and try again.');
+  const { PDFDocument, rgb } = PDFLib;
+  const doc=await PDFDocument.load(pdfBuf);
+  doc.getPages().forEach((page,idx)=>{
+    const p=pages[idx]; if(!p) return;
+    const {width, height}=page.getSize();
+    visibleBoxes(p).forEach(b=>{
+      page.drawRectangle({
+        x:b.x*width, y:(1-b.y-b.h)*height, width:b.w*width, height:b.h*height,
+        color: b.type==='sig'?rgb(0.49,0.94,0.40):rgb(1,0.94,0.40), opacity:0.5,
+        borderColor: b.type==='sig'?rgb(0.3,0.7,0.3):rgb(0.83,0.77,0), borderWidth:0.5
+      });
+    });
+  });
+  return await doc.save();
+}
+$('exportBtn').onclick=async ()=>{
+  $('exportBtn').disabled=true; $('exportBtn').textContent='Building…';
+  const unknown=pages.filter(p=>!p.formId).length;
+  try{
+    const bytes=await buildHighlighted();
+    const blob=new Blob([bytes], {type:'application/pdf'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=fileName+'_highlighted.pdf'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+    toast(unknown?`Highlighted PDF downloaded — print it single-sided. Note: ${unknown} page(s) still unrecognized, they export with no highlights.`
+      :'Highlighted PDF downloaded — print it single-sided.');
+  }catch(err){ toast('Export failed: '+err.message); }
+  $('exportBtn').disabled=false; $('exportBtn').textContent='Export highlighted PDF';
+};
+$('printBtn').onclick=async ()=>{
+  $('printBtn').disabled=true;
+  const unknown=pages.filter(p=>!p.formId).length;
+  try{
+    const bytes=await buildHighlighted();
+    const blob=new Blob([bytes], {type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    window.open(url,'_blank');
+    toast(unknown?`Opened the highlighted PDF — print it single-sided from your PDF viewer. Note: ${unknown} page(s) still unrecognized, they print with no highlights.`
+      :'Opened the highlighted PDF — print it single-sided from your PDF viewer.');
+  }catch(err){ toast('Print failed: '+err.message); }
+  $('printBtn').disabled=false;
+};
+renderIndex();
+</script>
+</body>
+</html>
+
