@@ -6,6 +6,7 @@
 <title>Closing Highlighter — Jax Exports</title>
 <style>
   * { box-sizing: border-box; }
+  :root { --sig: #7df066; --ini: #fff066; }
   body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f2f2f2; color: #222; }
   header { background: #1a1a1a; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   header h1 { font-size: 18px; margin: 0 8px 0 0; }
@@ -18,8 +19,8 @@
   button:disabled { opacity: .45; cursor: default; }
   .legend { display: flex; gap: 14px; align-items: center; margin-left: auto; font-size: 13px; }
   .swatch { display: inline-block; width: 16px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
-  .sw-green { background: rgba(125,240,102,.75); border: 1px solid #4caf50; }
-  .sw-yellow { background: rgba(255,240,102,.85); border: 1px solid #d4c400; }
+  .sw-green { background: color-mix(in srgb, var(--sig) 75%, white); border: 1px solid var(--sig); }
+  .sw-yellow { background: color-mix(in srgb, var(--ini) 85%, white); border: 1px solid var(--ini); }
   #main { display: flex; height: calc(100vh - 52px); }
   #pages { width: 250px; background: #fff; border-right: 1px solid #ddd; overflow-y: auto; padding: 8px; }
   #pages h3, #side h3 { margin: 6px 0 8px; font-size: 13px; text-transform: uppercase; color: #666; }
@@ -35,8 +36,8 @@
   #pageBox canvas { display: block; }
   #overlay { position: absolute; inset: 0; }
   .hl { position: absolute; border-radius: 2px; cursor: move; }
-  .hl.sig { background: rgba(125,240,102,.55); outline: 1px solid rgba(76,175,80,.7); }
-  .hl.ini { background: rgba(255,240,102,.55); outline: 1px solid rgba(212,196,0,.8); }
+  .hl.sig { background: color-mix(in srgb, var(--sig) 55%, transparent); outline: 1px solid color-mix(in srgb, var(--sig) 70%, black); }
+  .hl.ini { background: color-mix(in srgb, var(--ini) 55%, transparent); outline: 1px solid color-mix(in srgb, var(--ini) 80%, black); }
   .hl.selected { outline: 3px solid #1565c0; }
   .hl.cobuyer-hidden { display: none; }
   #drawHint { text-align: center; font-size: 12px; color: #777; padding: 6px; }
@@ -47,6 +48,7 @@
   .boxlist { font-size: 13px; }
   .boxlist div { padding: 5px 6px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; }
   .boxlist div.sel { background: #e3f2fd; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: middle; border: 1px solid rgba(0,0,0,.25); }
   #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 14px; display: none; z-index: 50; }
   #indexPanel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 420px; background: #fff; border-left: 2px solid #2e7d32; overflow-y: auto; padding: 16px; z-index: 40; box-shadow: -4px 0 16px rgba(0,0,0,.15); }
   #indexPanel h2 { margin-top: 0; }
@@ -70,8 +72,8 @@
   <button id="printBtn" class="secondary" disabled>Print (single-sided)</button>
   <button id="indexBtn" class="secondary">Form index</button>
   <div class="legend">
-    <span><span class="swatch sw-green"></span>Green = sign full name</span>
-    <span><span class="swatch sw-yellow"></span>Yellow = initial</span>
+    <span><span class="swatch sw-green"></span>Signature</span>
+    <span><span class="swatch sw-yellow"></span>Initials</span>
     <label style="color:#ddd"><input type="checkbox" id="cobuyerToggle"> Has co-buyer</label>
   </div>
 </header>
@@ -91,8 +93,16 @@
     <h3>Current page</h3>
     <div class="row"><label>Detected form</label><div id="formName" style="font-weight:bold">—</div><div id="formMeta" style="font-size:12px;color:#666"></div></div>
     <div class="row"><label>Draw color</label>
-      <button id="drawGreen" style="background:#4caf50">Green — signature</button>
-      <button id="drawYellow" class="secondary" style="background:#c9a227">Yellow — initials</button>
+      <button id="drawGreen">Signature</button>
+      <button id="drawYellow" class="secondary">Initials</button>
+    </div>
+    <div class="row"><label>Highlight colors (preview + export)</label>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;color:#222"><input type="color" id="sigColor" value="#7df066"> Signature</label>
+        <label style="display:flex;align-items:center;gap:5px;color:#222"><input type="color" id="iniColor" value="#fff066"> Initials</label>
+        <button id="resetColors" class="secondary" style="padding:4px 10px">Reset</button>
+      </div>
+      <div style="font-size:12px;color:#666;margin-top:4px">Pick any colors — they show on screen and carry into the exported PDF. Saved on this PC.</div>
     </div>
     <div class="row"><label>Highlights on this page</label><div class="boxlist" id="boxList"><div style="color:#888">None yet.</div></div></div>
     <div class="row" id="teachBox" style="display:none;border-top:1px solid #ddd;padding-top:10px">
@@ -144,9 +154,14 @@ const BLANK_HASH = "111111111111111111111111111111111111111111111111111011110101
 let pdfDoc = null, pdfBuf = null, fileName = 'closing-packet.pdf';
 let pages = [];           // {num, text, formId, formName, state, how, dist, boxes:[], phash}
 let current = 0, selectedBox = -1, drawType = 'sig', hasCobuyer = false;
+/* Highlight colors — changeable in the side panel, saved per PC */
+const DEFAULT_SIG = '#7df066', DEFAULT_INI = '#fff066';
+let sigColor = localStorage.getItem('ch_sig') || DEFAULT_SIG;
+let iniColor = localStorage.getItem('ch_ini') || DEFAULT_INI;
+function hexToRgb01(hex){ const n=parseInt(hex.slice(1),16); return [((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255]; }
+function shade(hex, f){ const [r,g,b]=hexToRgb01(hex); return `rgb(${Math.round(r*255*f)},${Math.round(g*255*f)},${Math.round(b*255*f)})`; }
 let customForms = JSON.parse(localStorage.getItem('ch_index_v1') || '[]');
 const $ = id => document.getElementById(id);
-const GREEN = 'rgba(125,240,102,.55)', YELLOW = 'rgba(255,240,102,.55)';
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none', 2600); }
 function allForms(){ const m={}; SEED.forEach(f=>m[f.id]=f); customForms.forEach(f=>m[f.id]=f); return Object.values(m); }
 function findForm(id){ return allForms().find(f=>f.id===id); }
@@ -282,7 +297,7 @@ function renderBoxList(){
   p.boxes.forEach((b,i)=>{
     const d=document.createElement('div');
     d.className=selectedBox===i?'sel':'';
-    d.innerHTML=`<span>${b.type==='sig'?'🟢':'🟡'} ${b.label||(b.type==='sig'?'Signature':'Initials')}${b.cobuyer?' (co-buyer)':''}</span><span><button data-a="flip" style="padding:2px 8px">↔ color</button> <button data-a="del" style="padding:2px 8px;background:#c62828">✕</button></span>`;
+    d.innerHTML=`<span><span class="dot" style="background:var(${b.type==='sig'?'--sig':'--ini'})"></span>${b.label||(b.type==='sig'?'Signature':'Initials')}${b.cobuyer?' (co-buyer)':''}</span><span><button data-a="flip" style="padding:2px 8px">↔ color</button> <button data-a="del" style="padding:2px 8px;background:#c62828">✕</button></span>`;
     d.onclick=()=>{ selectedBox=i; renderOverlay(); renderBoxList(); };
     d.querySelector('[data-a=flip]').onclick=ev=>{ ev.stopPropagation(); b.type=b.type==='sig'?'ini':'sig'; renderOverlay(); renderBoxList(); updateTotals(); };
     d.querySelector('[data-a=del]').onclick=ev=>{ ev.stopPropagation(); p.boxes.splice(i,1); selectedBox=-1; renderOverlay(); renderBoxList(); renderList(); updateTotals(); };
@@ -348,11 +363,25 @@ window.addEventListener('keydown', ev=>{
   }
 });
 function setDraw(t){ drawType=t;
-  $('drawGreen').style.background=t==='sig'?'#2e7d32':'#4caf50';
-  $('drawYellow').style.background=t==='ini'?'#8a6d00':'#c9a227';
+  $('drawGreen').style.background = t==='sig' ? shade(sigColor,0.55) : shade(sigColor,0.85);
+  $('drawYellow').style.background = t==='ini' ? shade(iniColor,0.55) : shade(iniColor,0.85);
 }
 $('drawGreen').onclick=()=>setDraw('sig');
 $('drawYellow').onclick=()=>setDraw('ini');
+
+/* ---- highlight colors: apply everywhere, persist per PC ---- */
+function applyColors(){
+  document.documentElement.style.setProperty('--sig', sigColor);
+  document.documentElement.style.setProperty('--ini', iniColor);
+  $('sigColor').value=sigColor; $('iniColor').value=iniColor;
+  localStorage.setItem('ch_sig', sigColor); localStorage.setItem('ch_ini', iniColor);
+  setDraw(drawType);
+  renderOverlay(); renderBoxList();
+}
+$('sigColor').addEventListener('input', e=>{ sigColor=e.target.value; applyColors(); });
+$('iniColor').addEventListener('input', e=>{ iniColor=e.target.value; applyColors(); });
+$('resetColors').onclick=()=>{ sigColor=DEFAULT_SIG; iniColor=DEFAULT_INI; applyColors(); toast('Colors reset to green / yellow.'); };
+applyColors();
 
 /* ================= Teach a new form ================= */
 $('teachSave').onclick=()=>{
@@ -426,14 +455,16 @@ async function buildHighlighted(){
   if(!pdfBuf || pdfBuf.byteLength < 100) throw new Error('Packet data is missing — reload the PDF and try again.');
   const { PDFDocument, rgb } = PDFLib;
   const doc=await PDFDocument.load(pdfBuf);
+  const [sr,sg,sb]=hexToRgb01(sigColor), [ir,ig,ib]=hexToRgb01(iniColor);
   doc.getPages().forEach((page,idx)=>{
     const p=pages[idx]; if(!p) return;
     const {width, height}=page.getSize();
     visibleBoxes(p).forEach(b=>{
+      const isSig=b.type==='sig';
       page.drawRectangle({
         x:b.x*width, y:(1-b.y-b.h)*height, width:b.w*width, height:b.h*height,
-        color: b.type==='sig'?rgb(0.49,0.94,0.40):rgb(1,0.94,0.40), opacity:0.5,
-        borderColor: b.type==='sig'?rgb(0.3,0.7,0.3):rgb(0.83,0.77,0), borderWidth:0.5
+        color: isSig?rgb(sr,sg,sb):rgb(ir,ig,ib), opacity:0.5,
+        borderColor: isSig?rgb(sr*0.7,sg*0.7,sb*0.7):rgb(ir*0.7,ig*0.7,ib*0.7), borderWidth:0.5
       });
     });
   });
